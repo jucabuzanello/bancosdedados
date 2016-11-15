@@ -1,0 +1,1 @@
+select * from funcionarios where 1 = 1
