@@ -1,0 +1,441 @@
+/HEADER
+================================================================================================================
+EMPRESA .: ___________________________________                                                 FOLHA .:   ____0.
+REGISTRO  DE  APURACAO  DO ICMS                                           PERIODO .: __/__/____  ATE  __/__/____
+================================================================================================================
+CFO    DESCRICAO                               VLR. CONT     BASE CALC       IMPOSTO       ISENTAS        OUTRAS
+/SUBHEADER1
+
+                                                                        _________________
+
+/BODY
+___.   ___________________________________   ____,___.__   ____,___.__   ____,___.__   ____,___.__   ____,___.__
+/SUBTOTAL2
+___.   ___________________________________   ____,___.__   ____,___.__   ____,___.__   ____,___.__   ____,___.__
+/SUBTOTAL1
+
+T O T A L    =================  >>           ____,___.__   ____,___.__   ____,___.__   ____,___.__   ____,___.__
+/TOTAL
+
+
+          DEMONSTRATIVO  DE  CREDITO                              DEMONSTRATIVO  DE  DEBITO
+
+POR ENTRADAS C/CREDITOS DE IMPOSTO ===>  _____,___.__         POR SAIDAS C/DEBITOS DE IMPOSTO ===>  _____,___.__
+OUTROS CREDITOS ======================>  _____,___.__         OUTROS DEBITOS ====================>  _____,___.__
+ESTORNOS DE DEBITOS ==================>  _____,___.__         ESTORNOS DE CREDITOS ==============>  _____,___.__
+SUB  -  TOTAL ========================>  _____,___.__         TOTAL =============================>  _____,___.__
+SALDO CREDOR PERIODO ANTERIOR ========>  _____,___.__
+TOTAL  ===============================>  _____,___.__
+
+                                              APURACAO DE SALDOS
+
+SALDO DEVEDOR ========================>  _____,___.__      DEDUCOES ==========> _____,___.__
+IMPOSTO A RECOLHER ===================>  _____,___.__      SALDO CREDOR ======> _____,___.__
+
+____           _________________________________________________________
+               _________________________________________________________
+               _________________________________________________________
+               _________________________________________________________
+
+/*
+#INCLUDE OBJETOS.LIB
+#INCLUDE ROTINAS.LIB
+STRING  VARQTEMP
+
+NUMBER VT1IMPICM
+NUMBER VANO VMES VDIA vanofin vmesfin
+
+NUMBER VTOTALICMS VSALDOICMS VSALDOTOTAL SUBTOCRE SUBTODEV VSALDO VTIMPREC
+NUMBER VALORICMS VOUTC_ICMS VOUTD_ICMS VESTC_ICMS VESTD_ICMS VDEDICMS VICMS1
+NUMBER VVTIMPREC VVALOR1 VSALOBS VTIPO
+number nSubTotCred
+integer iTipo IEMPRESA IPAGINA
+DATE DDATAINI DDATAFIN
+
+STRING VDESCR1 sRegApu
+STRING SPARAMETROS PAR_EMPRESA PAR_DATAINI PAR_DATAFIN PAR_PAGINA DESCR_EMPRESA SAUX PAR_CHAMOU_RELATORIO
+CMDLINE SPARAMETROS
+INTEGER ITOTAL POSICAO POSICAO_ANTERIOR PARAM
+
+LENGTH SPARAMETROS TO ITOTAL
+MOVE 0 TO POSICAO
+MOVE 1 TO POSICAO_ANTERIOR
+MOVE 1 TO PARAM
+LEITURA_PARAMETROS:
+			MOVE (_POS(SPARAMETROS,"|",POSICAO_ANTERIOR)) TO POSICAO
+			IF POSICAO EQ 0 BEGIN
+						GOTO FLEITURA_PARAMETROS
+			END
+			MOVE (MID(SPARAMETROS,POSICAO - POSICAO_ANTERIOR,POSICAO_ANTERIOR)) TO SAUX
+			IF PARAM EQ 1 BEGIN
+						MOVE SAUX TO PAR_EMPRESA
+			END
+			IF PARAM EQ 2 BEGIN
+						MOVE SAUX TO PAR_DATAINI
+			END
+			IF PARAM EQ 3 BEGIN
+						MOVE SAUX TO PAR_DATAFIN
+			END
+			IF PARAM EQ 4 BEGIN
+						MOVE SAUX TO PAR_PAGINA
+						MOVE (MID(SPARAMETROS,ITOTAL,POSICAO + 1)) TO PAR_CHAMOU_RELATORIO
+						GOTO FLEITURA_PARAMETROS
+			END
+			INCREMENT PARAM
+			CALC (POSICAO + 1) TO POSICAO_ANTERIOR
+			IF PARAM GT 5 BEGIN
+			   GOTO FLEITURA_PARAMETROS
+			END
+GOTO LEITURA_PARAMETROS
+FLEITURA_PARAMETROS:
+
+OPEN LFLANENT
+OPEN LFPARAM
+OPEN LFCADCFO
+OPEN LFLANSAD
+OPEN LFAPUOBS
+OPEN LFAPURA
+OPEN LFTEMAPU
+open lfgedime
+FILE_MODE LFPARAM READ_ONLY
+FILE_MODE LFLANENT READ_ONLY
+FILE_MODE LFCADCFO READ_ONLY
+FILE_MODE LFLANSAD READ_ONLY
+FILE_MODE LFAPUOBS READ_ONLY
+file_mode lfgedime read_only
+
+MOVE PAR_EMPRESA TO IEMPRESA
+MOVE PAR_DATAINI TO DDATAINI
+MOVE PAR_DATAFIN TO DDATAFIN
+MOVE PAR_PAGINA TO IPAGINA
+
+//clearxy screenend 00
+//show iempresa " " ddataini " " ddatafin " " ipagina " " PAR_CHAMOU_RELATORIO
+//pause ""
+//clearxy screenend 00
+
+findkey eq lfparam by index.1 for lfparam.codigo eq iempresa
+move lfparam.regime_apu_dime to sRegApu
+MOVE LFPARAM.RAZAO TO DESCR_EMPRESA
+
+IF PAR_CHAMOU_RELATORIO EQ "R" BEGIN
+			GOTOXY 18 3
+			SHOW "P R O C E S S A N D O,  A G U A R D E ..."
+			CLEARXY SCREENEND 00
+			SHOW "PROCESSANDO ENTRADAS, AGUARDE..."
+END
+ELSE BEGIN
+			CLEARXY SCREENEND 00
+			SHOW "GERANDO DADOS DE ENTRADAS PARA APURACAO DO ICMS..."
+END
+
+LOCK
+ZEROFILE LFTEMAPU
+
+MOVE 0 TO VTOTALICMS
+
+CLEAR LFLANENT
+MOVE IEMPRESA   TO LFLANENT.LOJA
+MOVE DDATAINI TO LFLANENT.DENTRADA 
+FIND GT LFLANENT BY INDEX.3
+[ FOUND] INDICATE FOUND AS LFLANENT.LOJA     EQ IEMPRESA
+[ FOUND] INDICATE FOUND AS LFLANENT.DENTRADA LE DDATAFIN
+WHILE [ FOUND]
+   CLEAR LFTEMAPU
+   MOVE IEMPRESA             TO LFTEMAPU.LOJA
+   MOVE LFLANENT.NUMLANC  TO LFTEMAPU.NUM_LANC
+   MOVE LFLANENT.CCFO     TO LFTEMAPU.CFO
+   MOVE LFLANENT.ALIQUOTA TO LFTEMAPU.ALIQUOTA
+   MOVE "E"               TO LFTEMAPU.TIPO
+   SAVERECORD LFTEMAPU
+
+   CALC (VTOTALICMS + LFLANENT.VL_IMPOSTO) TO VTOTALICMS
+  
+   FIND GT LFLANENT BY INDEX.3
+   [ FOUND] INDICATE FOUND AS LFLANENT.LOJA     EQ IEMPRESA
+   [ FOUND] INDICATE FOUND AS LFLANENT.DENTRADA LE DDATAFIN  
+END
+
+IF PAR_CHAMOU_RELATORIO EQ "R" BEGIN
+			CLEARXY SCREENEND 00
+			SHOW "PROCESSANDO SAIDAS, AGUARDE..."
+END
+ELSE BEGIN
+			CLEARXY SCREENEND 00
+			SHOW "GERANDO DADOS DE SAÍDA PARA APURACAO DO ICMS..."
+END
+
+CLEAR LFLANSAD
+MOVE IEMPRESA   TO LFLANSAD.LOJA
+MOVE DDATAINI TO LFLANSAD.DT_SAIDA
+FIND GT LFLANSAD BY INDEX.2
+[ FOUND] INDICATE FOUND AS LFLANSAD.LOJA     EQ IEMPRESA
+[ FOUND] INDICATE FOUND AS LFLANSAD.DT_SAIDA LE DDATAFIN  
+WHILE [ FOUND]
+   
+   CLEAR LFTEMAPU
+   MOVE IEMPRESA            TO LFTEMAPU.LOJA
+   MOVE LFLANSAD.NUM_DOC TO LFTEMAPU.NUM_DOC
+   MOVE LFLANSAD.SERIE   TO LFTEMAPU.SERIE
+   MOVE LFLANSAD.CFO     TO LFTEMAPU.CFO
+   MOVE LFLANSAD.ALIICM  TO LFTEMAPU.ALIQUOTA
+   MOVE LFLANSAD.DT_SAIDA TO LFTEMAPU.DEMISSAO
+   MOVE "S"          TO LFTEMAPU.TIPO
+   SAVERECORD LFTEMAPU
+      
+   CALC (VT1IMPICM    + LFLANSAD.IMPICM)    TO VT1IMPICM
+
+   FIND GT LFLANSAD BY INDEX.2
+   [ FOUND] INDICATE FOUND AS LFLANSAD.LOJA     EQ IEMPRESA
+   [ FOUND] INDICATE FOUND AS LFLANSAD.DT_SAIDA LE DDATAFIN     
+END
+
+UNLOCK
+
+IF PAR_CHAMOU_RELATORIO EQ "R" BEGIN
+			CLEARXY SCREENEND 00
+			SHOW "IMPRIMINDO, AGUARDE..."
+			MOVE (CRIA_ARQ_TEMP("")) TO VARQTEMP
+END
+ELSE BEGIN
+			CLEARXY SCREENEND 00
+			SHOW "GERANDO ARQUIVO TEXTO DE APURACAO DO ICMS..."
+			MOVE "C:\SISTEMAS\LIVROS\SPED002.SPE" TO VARQTEMP
+END
+OUTFILE VARQTEMP
+			
+LEFT  DDATAINI TO VDIA 2
+RIGHT DDATAINI TO VANO 4
+MID   DDATAINI  TO VMES 2 4
+
+right DDATAFIN to vanofin 4
+mid DDATAFIN to vmesfin 2 4
+
+IF IPAGINA GT 0 MOVE (IPAGINA - 1) TO PAGECOUNT
+
+CLEAR LFTEMAPU
+REPORT LFTEMAPU BY INDEX.1 BREAK LFTEMAPU.TIPO LFTEMAPU.CFO
+   
+    SECTION HEADER
+       PRINT DESCR_EMPRESA
+       PRINT PAGECOUNT
+       PRINT DDATAINI
+       PRINT DDATAFIN
+							IF PAR_CHAMOU_RELATORIO EQ "R" BEGIN
+          OUTPUT HEADER
+							END			
+    
+    SECTION SUBHEADER1
+       IF LFTEMAPU.TIPO EQ "E" PRINT "E N T R A D A" TO SUBHEADER1.1
+       ELSE PRINT "  S A I D A" TO SUBHEADER1.1
+							IF PAR_CHAMOU_RELATORIO EQ "R" BEGIN			
+										OUTPUT SUBHEADER1
+							END			
+    
+    SECTION BODY
+       PRINT LFTEMAPU.CFO
+       FINDKEY EQ LFCADCFO BY INDEX.1 FOR LFCADCFO.CODIGO EQ LFTEMAPU.CFO
+       PRINT LFCADCFO.DESCR
+       
+       IF LFTEMAPU.TIPO EQ "E" BEGIN
+          FINDKEY EQ LFLANENT BY INDEX.1 FOR LFLANENT.LOJA     EQ LFTEMAPU.LOJA;
+                                             LFLANENT.NUMLANC  EQ LFTEMAPU.NUM_LANC;
+                                             LFLANENT.ALIQUOTA EQ LFTEMAPU.ALIQUOTA
+
+          PRINT LFLANENT.VL_CONTABI
+          PRINT LFLANENT.VL_BCICMS
+          PRINT LFLANENT.VL_IMPOSTO
+          PRINT LFLANENT.VL_ISENTAS
+          PRINT LFLANENT.VL_OUTRAS                                              
+       END                                           
+       ELSE BEGIN
+          FINDKEY EQ LFLANSAD BY INDEX.1 FOR LFLANSAD.LOJA    EQ LFTEMAPU.LOJA;
+                                             LFLANSAD.NUM_DOC EQ LFTEMAPU.NUM_DOC;
+                                             LFLANSAD.SERIE   EQ LFTEMAPU.SERIE;
+                                             LFLANSAD.ALIICM  EQ LFTEMAPU.ALIQUOTA;
+                                             LFLANSAD.DT_SAIDA EQ LFTEMAPU.DEMISSAO
+
+          PRINT LFLANSAD.VL_CONTAB TO BODY.3
+          PRINT LFLANSAD.B_C_ICM   TO BODY.4 
+          PRINT LFLANSAD.IMPICM    TO BODY.5
+          PRINT LFLANSAD.ISENICM   TO BODY.6
+          PRINT LFLANSAD.OUTICM    TO BODY.7
+       END    
+
+    SECTION SUBTOTAL1
+       SUBTOTAL SUBTOTAL2.3
+       SUBTOTAL SUBTOTAL2.4
+       SUBTOTAL SUBTOTAL2.5
+       SUBTOTAL SUBTOTAL2.6
+       SUBTOTAL SUBTOTAL2.7
+							IF PAR_CHAMOU_RELATORIO EQ "R" BEGIN
+										OUTPUT SUBTOTAL1   
+							END			
+
+    SECTION SUBTOTAL2
+       PRINT BODY.1
+       PRINT BODY.2
+       SUBTOTAL BODY.3
+       SUBTOTAL BODY.4
+       SUBTOTAL BODY.5
+       SUBTOTAL BODY.6
+       SUBTOTAL BODY.7
+							IF PAR_CHAMOU_RELATORIO EQ "R" BEGIN
+										OUTPUT SUBTOTAL2
+							END			
+    
+    SECTION TOTAL
+       BLANKFORM TOTAL
+       
+       FINDKEY EQ LFAPURA BY INDEX.1 FOR LFAPURA.EMPRESA EQ IEMPRESA;
+                                         LFAPURA.MES     EQ VMES;
+                                         LFAPURA.ANO     EQ VANO
+                                         
+       MOVE LFAPURA.VALORICMS TO VICMS1
+       MOVE LFAPURA.OUTC_ICMS TO VOUTC_ICMS
+       MOVE LFAPURA.OUTD_ICMS TO VOUTD_ICMS
+       MOVE LFAPURA.ESTC_ICMS TO VESTC_ICMS
+       MOVE LFAPURA.ESTD_ICMS TO VESTD_ICMS
+       MOVE LFAPURA.DEDICMS   TO VDEDICMS
+
+       //***** Informa‡äes obtidas na DIME - JB - altera‡Æo em 04/07/2008
+       move 0 to nSubTotCred
+       if ((sRegApu = "3") and ((vmesfin = 6) or (vmesfin = 12))) begin //se a empresa for estimativa fiscal
+          findkey eq lfgedime by index.1 for lfgedime.empresa eq IEMPRESA;
+                                             lfgedime.mes     eq vmesfin;
+                                             lfgedime.ano     eq vanofin;
+                                             lfgedime.tipo    eq 29
+          move lfgedime.soma_parcelas29 to nSubTotCred
+          move lfgedime.credacumesant29 to vicms1
+       end
+       else begin
+          move voutc_icms to nSubTotCred          
+       end
+
+       //**** Fim da informa‡äes obtidas na DIME
+
+       PRINT VTOTALICMS
+       PRINT VT1IMPICM
+       PRINT nSubTotCred
+       PRINT VOUTD_ICMS
+       PRINT VESTD_ICMS
+       PRINT VESTC_ICMS
+							
+       CALC (VTOTALICMS + nSubTotCred + VESTD_ICMS) TO SUBTOCRE
+       CALC (VT1IMPICM  + VOUTD_ICMS + VESTC_ICMS) TO SUBTODEV
+
+       PRINT SUBTOCRE
+       PRINT SUBTODEV
+       PRINT VICMS1
+
+       CALC (SUBTOCRE    + VICMS1)    TO VSALDOTOTAL
+       CALC (VSALDOTOTAL - SUBTODEV ) TO VSALDOICMS
+
+       PRINT VSALDOTOTAL
+
+       MOVE (ABS(VSALDOICMS)) TO VVALOR1
+       MOVE 0 TO VDEDICMS
+       MOVE VSALDOICMS TO VSALOBS
+
+       IF VSALDOICMS LT 0 BEGIN
+          PRINT VVALOR1  TO TOTAL.11
+          CALC ((VVALOR1 * LFPARAM.PERC) / 100) TO VDEDICMS
+       END
+       ELSE PRINT VSALDO TO TOTAL.11
+
+       IF VSALDOICMS LT 0 PRINT VDEDICMS TO TOTAL.12
+       ELSE PRINT VSALDO TO TOTAL.12
+
+       CALC (VVALOR1 - VDEDICMS) TO VTIMPREC
+
+       IF VSALDOICMS LT 0 BEGIN
+          MOVE (ABS(VTIMPREC)) TO VVTIMPREC
+          PRINT VVTIMPREC  TO TOTAL.13
+       END
+       ELSE PRINT VSALDO   TO TOTAL.13
+     
+       IF VSALDOICMS GT 0 PRINT VVALOR1  TO TOTAL.14
+       ELSE PRINT VSALDO   TO TOTAL.14
+
+							IF PAR_CHAMOU_RELATORIO EQ "S" BEGIN // IF PARA GERAR DADOS PARA A GERAÇÃO DO SPED
+										WRITE '"' (VTOTALICMS * 100) '",'   //POR ENTRADAS C/CREDITOS DE IMPOSTO
+										WRITE '"' (VT1IMPICM * 100) '",'    //POR SAIDAS C/DEBITOS DE IMPOSTO
+										WRITE '"' (nSubTotCred * 100) '",'  //OUTROS CREDITOS
+										WRITE '"' (VOUTD_ICMS * 100) '",'   //OUTROS DEBITOS
+										WRITE '"' (VESTD_ICMS * 100) '",'   //ESTORNOS DE DEBITOS
+										WRITE '"' (VESTC_ICMS * 100) '",'   //ESTORNOS DE CREDITOS
+										WRITE '"' (SUBTOCRE * 100) '",'     //SUB - TOTAL DE CREDITOS
+										WRITE '"' (SUBTODEV * 100) '",'     //SUBTOTAL DE DEBITOS
+										WRITE '"' (VICMS1 * 100) '",'       //SALDO CREDOR PERIODO ANTERIOR
+										WRITE '"' (VSALDOTOTAL * 100) '",'  //TOTAL DE CREDITOS
+										WRITE '"' (TOTAL.11 * 100) '",'     //APURACAO DE SALDOS - SALDO DEVEDOR
+										WRITE '"' (TOTAL.12 * 100) '",'      //APURACAO DE SALDOS - DEDUCOES
+										WRITE '"' (TOTAL.13 * 100) '",'     //APURACAO DE SALDOS - IMPOSTO A RECOLHER
+										WRITELN '"' (TOTAL.14 * 100) '"'   //APURACAO DE SALDOS - SALDO CREDOR
+							END
+
+       // ****** O B S ****
+
+       MOVE 1 TO VTIPO
+       FINDKEY GE LFAPUOBS BY INDEX.1 FOR LFAPUOBS.LOJA   EQ IEMPRESA; //EQ
+                                          LFAPUOBS.MES    EQ VMES;
+                                          LFAPUOBS.ANO    EQ VANO;
+                                          LFAPUOBS.TIPO   EQ VTIPO
+
+             PRINT "OBS:"  TO TOTAL.15
+
+             PRINT LFAPUOBS.DESCR1 TO TOTAL.16
+             PRINT LFAPUOBS.DESCR2 TO TOTAL.17
+             PRINT LFAPUOBS.DESCR3 TO TOTAL.18
+             PRINT LFAPUOBS.DESCR4 TO TOTAL.19
+							IF PAR_CHAMOU_RELATORIO EQ "R" BEGIN
+										OUTPUT TOTAL
+							END			
+
+							IF PAR_CHAMOU_RELATORIO EQ "R" BEGIN
+										MOVE (VMES + 1) TO VMES
+          IF VMES GT 12 BEGIN
+             MOVE 01 TO VMES
+             MOVE (VANO + 1) TO VANO
+          END
+
+          FINDKEY EQ LFAPURA BY INDEX.1 FOR LFAPURA.EMPRESA EQ IEMPRESA;
+                                            LFAPURA.MES     EQ VMES;
+                                            LFAPURA.ANO     EQ VANO
+         REREAD 
+          IF VSALDOICMS GT 0 MOVE VSALDOICMS TO LFAPURA.VALORICMS
+          ELSE MOVE 0 TO LFAPURA.VALORICMS
+          SAVERECORD LFAPURA
+         UNLOCK
+       END
+REPORTEND
+IF PAR_CHAMOU_RELATORIO EQ "R" BEGIN
+			FORMFEED
+END
+OUTCLOSE
+
+IF PAR_CHAMOU_RELATORIO EQ "R" BEGIN
+			CLEARXY SCREENEND 00
+			SEND READ TO USER_OUTPUT VARQTEMP
+			SEND Display_Report  TO User_Output
+			ERASEFILE VARQTEMP
+			CLEARSCREEN
+END
+ELSE BEGIN
+   CLEARXY SCREENEND 00
+   ABORT
+END
+
+KEYPROC KEY.ESCAPE
+  CLEARSCREEN
+  ABORT
+
+KEYPROC KEY.CLEAR
+KEYPROC KEY.PRINT
+KEYPROC KEY.DELETE
+KEYPROC KEY.HELP
+KEYPROC KEY.USER
+KEYPROC KEY.USER2
+KEYPROC KEY.SAVE
+  ENTAGAIN
+RETURN
